@@ -2,7 +2,7 @@ import makeWASocket, {
   useSingleFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion
-} from "baileys";
+} from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import fs from "fs";
 import path from "path";
