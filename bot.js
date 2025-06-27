@@ -1,51 +1,67 @@
-import { config } from "dotenv";
-config();
+require('dotenv').config();
 
-import makeWASocket, {
-  DisconnectReason,
-  fetchLatestBaileysVersion,
+const baileys = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+
+const {
+  makeWASocket,
   useSingleFileAuthState,
-} from "@whiskeysockets/baileys";
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+} = baileys;
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-
-import OpenAI from "openai";
-
-const { state, saveState } = useSingleFileAuthState("./memory/auth_info.json");
+const { state, saveState } = useSingleFileAuthState('./auth_info.json');
 
 async function startBot() {
-  const [version] = await fetchLatestBaileysVersion();
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  console.log(`Using WA version v${version.join('.')}, latest: ${isLatest}`);
 
   const sock = makeWASocket({
     version,
+    logger: pino({ level: 'silent' }),
+    printQRInTerminal: false,
     auth: state,
-    printQRInTerminal: true,
   });
 
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === "close") {
-      if (
-        (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
-      ) {
+  sock.ev.on('connection.update', (update) => {
+    const { connection, qr, lastDisconnect } = update;
+
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+      console.log('Scan le QR code ci-dessus');
+    }
+
+    if (connection === 'close') {
+      const shouldReconnect =
+        (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('Connection fermée, reconnect?', shouldReconnect);
+      if (shouldReconnect) {
         startBot();
       } else {
-        console.log("Déconnecté, supprime auth_info.json puis relance");
+        console.log('Déconnecté (logged out).');
       }
-    } else if (connection === "open") {
-      console.log("Connexion réussie !");
+    } else if (connection === 'open') {
+      console.log('Connecté à WhatsApp!');
     }
   });
 
-  sock.ev.on("creds.update", saveState);
+  sock.ev.on('creds.update', saveState);
 
-  // Exemple simple : répondre "Salut !" à tout message reçu
-  sock.ev.on("messages.upsert", async ({ messages }) => {
+  // Exemple d'écoute message simple
+  sock.ev.on('messages.upsert', ({ messages }) => {
     const msg = messages[0];
-    if (!msg.message || msg.key.fromMe) return;
+    if (!msg.message) return;
+    if (msg.key.fromMe) return;
+
     const from = msg.key.remoteJid;
-    await sock.sendMessage(from, { text: "Salut !" });
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+
+    console.log(`Message reçu de ${from}: ${text}`);
+
+    if (text.toLowerCase() === '!ping') {
+      sock.sendMessage(from, { text: 'Pong!' });
+    }
   });
 }
 
