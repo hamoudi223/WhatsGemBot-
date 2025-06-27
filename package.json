@@ -1,0 +1,14 @@
+{
+  "name": "whatsgembot",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp IA toxique avec Gemini",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1"
+  }
+}
