@@ -1,27 +1,18 @@
 require('dotenv').config();
-
-const baileys = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useSingleFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
-const pino = require('pino');
+const path = require('path');
 
-const {
-  makeWASocket,
-  useSingleFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason,
-} = baileys;
-
-const { state, saveState } = useSingleFileAuthState('./auth_info.json');
+const { state, saveState } = useSingleFileAuthState(path.join(__dirname, 'auth_info.json'));
 
 async function startBot() {
   const { version, isLatest } = await fetchLatestBaileysVersion();
-  console.log(`Using WA version v${version.join('.')}, latest: ${isLatest}`);
+  console.log(`Using WA version v${version.join('.')}, isLatest: ${isLatest}`);
 
   const sock = makeWASocket({
     version,
-    logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    auth: state,
+    auth: state
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -29,40 +20,39 @@ async function startBot() {
 
     if (qr) {
       qrcode.generate(qr, { small: true });
-      console.log('Scan le QR code ci-dessus');
+      console.log('QR Code generated, scan it with WhatsApp.');
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('Connection fermée, reconnect?', shouldReconnect);
+      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      console.log('Connection closed. Reconnecting:', shouldReconnect);
       if (shouldReconnect) {
         startBot();
-      } else {
-        console.log('Déconnecté (logged out).');
       }
     } else if (connection === 'open') {
-      console.log('Connecté à WhatsApp!');
+      console.log('Connected to WhatsApp!');
     }
   });
 
   sock.ev.on('creds.update', saveState);
 
-  // Exemple d'écoute message simple
-  sock.ev.on('messages.upsert', ({ messages }) => {
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
     const msg = messages[0];
     if (!msg.message) return;
     if (msg.key.fromMe) return;
 
     const from = msg.key.remoteJid;
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-    console.log(`Message reçu de ${from}: ${text}`);
+    if (!text) return;
 
-    if (text.toLowerCase() === '!ping') {
-      sock.sendMessage(from, { text: 'Pong!' });
+    console.log(`Message from ${from}: ${text}`);
+
+    if (text.toLowerCase() === 'ping') {
+      await sock.sendMessage(from, { text: 'Pong!' });
     }
   });
 }
 
-startBot().catch(console.error);
+startBot().catch(err => console.error(err));
