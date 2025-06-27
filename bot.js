@@ -1,21 +1,19 @@
 import makeWASocket, {
-  useSingleFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import fs from "fs";
 import path from "path";
 import { config } from "dotenv";
-import { Configuration, OpenAIApi } from "openai";
+import OpenAI from "openai";
 
 config();
 
-const openai = new OpenAIApi(new Configuration({
-  apiKey: process.env.OPENAI_API_KEY
-}));
-
-const { state, saveState } = useSingleFileAuthState("./auth_info.json");
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 let iaActive = true;
 
@@ -23,7 +21,6 @@ const stickersDir = path.resolve("./stickers");
 const stickers = fs.existsSync(stickersDir)
   ? fs.readdirSync(stickersDir).filter(f => f.endsWith(".webp"))
   : [];
-
 
 const memoryDir = "./memory";
 if (!fs.existsSync(memoryDir)) fs.mkdirSync(memoryDir);
@@ -38,19 +35,19 @@ function saveMemory(jid, messages) {
 }
 
 async function getBotResponse(prompt, jid) {
-    const context = loadMemory(jid);
-    context.push({ role: "user", content: prompt });
+  const context = loadMemory(jid);
+  context.push({ role: "user", content: prompt });
 
-  const systemPrompt = \`Tu es un pote Discord toxique, sarcastique, qui insulte à moitié mais reste drôle. Sois insolent et familier.\`;
+  const systemPrompt = `Tu es un pote Discord toxique, sarcastique, qui insulte à moitié mais reste drôle. Sois insolent et familier.`;
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: prompt }
+        ...context
       ]
     });
-    
+
     const botReply = response.choices[0].message.content.trim();
     context.push({ role: "assistant", content: botReply });
     saveMemory(jid, context);
@@ -63,6 +60,7 @@ async function getBotResponse(prompt, jid) {
 }
 
 async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -71,7 +69,7 @@ async function startBot() {
     auth: state
   });
 
-  sock.ev.on("creds.update", saveState);
+  sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
     if (connection === "close") {
