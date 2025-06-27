@@ -7,11 +7,8 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.18",
-    "@hapi/boom": "^10.0.0",
-    "dotenv": "^16.0.3",
-    "openai": "^4.6.0"
-  },
-  "engines": {
-    "node": ">=18"
+    "dotenv": "^16.6.0",
+    "openai": "^4.10.0",
+    "@hapi/boom": "^10.0.0"
   }
 }
