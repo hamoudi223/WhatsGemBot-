@@ -1,36 +1,28 @@
 const { default: makeWASocket, useSingleFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const path = require('path');
 const qrcode = require('qrcode-terminal');
+const path = require('path');
 
+// Auth
 const { state, saveState } = useSingleFileAuthState(path.join(__dirname, 'auth_info.json'));
 
-async function startBot() {
-  const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false // deprecated, on gère QR nous-mêmes
-  });
+// Create socket
+const sock = makeWASocket({
+  auth: state,
+  printQRInTerminal: true,
+  browser: ['ThatBotz', 'Chrome', '1.0.0']
+});
 
-  sock.ev.on('connection.update', (update) => {
-    const { connection, qr } = update;
-    if (qr) {
-      qrcode.generate(qr, { small: true });
-      console.log('Scanne ce QR avec ton WhatsApp');
-    }
-    if (connection === 'close') {
-      const reason = update.lastDisconnect?.error?.output?.statusCode;
-      console.log('Déconnexion, raison:', reason);
-      if (reason === DisconnectReason.loggedOut) {
-        console.log('Session déconnectée, supprime auth_info.json pour réauthentifier');
-      } else {
-        startBot(); // restart le bot si déconnexion non prévue
-      }
-    }
-    if (connection === 'open') {
-      console.log('Connecté à WhatsApp !');
-    }
-  });
+sock.ev.on('creds.update', saveState);
 
-  sock.ev.on('creds.update', saveState);
-}
-
-startBot();
+sock.ev.on('connection.update', (update) => {
+  const { connection, lastDisconnect } = update;
+  if (connection === 'close') {
+    const shouldReconnect = (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut);
+    console.log('Connection closed. Reconnecting:', shouldReconnect);
+    if (shouldReconnect) {
+      require('./bot.cjs'); // redémarre le bot
+    }
+  } else if (connection === 'open') {
+    console.log('✅ Bot connecté avec succès !');
+  }
+});
