@@ -1,40 +1,30 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 
-async function startSock() {
-    const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info'));
+const { state, saveState } = useSingleFileAuthState(path.join(__dirname, 'auth_info.json'));
 
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true,
-    });
+async function startBot() {
+  const sock = makeWASocket({
+    auth: state,
+  });
 
-    sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('connection.update', (update) => {
+    const { connection, qr } = update;
+    if (qr) {
+      console.log('📱 Scanne ce QR code avec WhatsApp pour connecter le bot :');
+      qrcode.generate(qr, { small: true });
+    }
+    if (connection === 'close') {
+      console.log('Connexion fermée, tentative de reconnexion...');
+      startBot();
+    }
+    if (connection === 'open') {
+      console.log('Bot connecté avec succès !');
+    }
+  });
 
-    sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed due to', lastDisconnect.error, ', reconnecting:', shouldReconnect);
-            if (shouldReconnect) {
-                startSock();
-            }
-        } else if (connection === 'open') {
-            console.log('✅ Bot connecté avec succès !');
-        }
-    });
-
-    sock.ev.on('messages.upsert', ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message) return;
-
-        const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-        const sender = msg.key.remoteJid;
-
-        if (messageText.toLowerCase() === 'salut') {
-            sock.sendMessage(sender, { text: 'Salut ! Je suis Makima, prête à vous servir.' });
-        }
-    });
+  sock.ev.on('creds.update', saveState);
 }
 
-startSock();
+startBot();
