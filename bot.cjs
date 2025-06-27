@@ -1,40 +1,35 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useSingleFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
+const fs = require('fs');
 
-async function startSock() {
-    const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info'));
+const { state, saveCreds } = useSingleFileAuthState(path.join(__dirname, 'auth_info.json'));
 
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true,
-    });
+async function startBot() {
+  const { version, isLatest } = await fetchLatestBaileysVersion();
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false, // désactivé, on gère manuellement
+    browser: ['Ubuntu', 'Chrome', '22.04.4'],
+  });
 
-    sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('connection.update', (update) => {
+    const { connection, qr } = update;
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+      console.log('📱 Scan le QR code ci-dessus pour connecter ton bot');
+    }
 
-    sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('connection closed due to', lastDisconnect.error, ', reconnecting:', shouldReconnect);
-            if (shouldReconnect) {
-                startSock();
-            }
-        } else if (connection === 'open') {
-            console.log('✅ Bot connecté avec succès !');
-        }
-    });
+    if (connection === 'close') {
+      const reason = update.lastDisconnect?.error?.output?.statusCode;
+      console.log('❌ Déconnecté, raison:', reason);
+    } else if (connection === 'open') {
+      console.log('✅ Connecté à WhatsApp !');
+    }
+  });
 
-    sock.ev.on('messages.upsert', ({ messages }) => {
-        const msg = messages[0];
-        if (!msg.message) return;
-
-        const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-        const sender = msg.key.remoteJid;
-
-        if (messageText.toLowerCase() === 'salut') {
-            sock.sendMessage(sender, { text: 'Salut ! Je suis Makima, prête à vous servir.' });
-        }
-    });
+  sock.ev.on('creds.update', saveCreds);
 }
 
-startSock();
+startBot();
