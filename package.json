@@ -1,9 +1,8 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.cjs"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.18",
