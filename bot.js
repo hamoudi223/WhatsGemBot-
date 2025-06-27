@@ -2,7 +2,7 @@ import makeWASocket, {
   useSingleFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion
-} from "@whiskeysockets/baileys";
+} from "baileys";
 import { Boom } from "@hapi/boom";
 import fs from "fs";
 import path from "path";
@@ -24,7 +24,23 @@ const stickers = fs.existsSync(stickersDir)
   ? fs.readdirSync(stickersDir).filter(f => f.endsWith(".webp"))
   : [];
 
-async function getBotResponse(prompt) {
+
+const memoryDir = "./memory";
+if (!fs.existsSync(memoryDir)) fs.mkdirSync(memoryDir);
+
+function loadMemory(jid) {
+  const file = `${memoryDir}/${jid}.json`;
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : [];
+}
+
+function saveMemory(jid, messages) {
+  fs.writeFileSync(`${memoryDir}/${jid}.json`, JSON.stringify(messages.slice(-10), null, 2));
+}
+
+async function getBotResponse(prompt, jid) {
+    const context = loadMemory(jid);
+    context.push({ role: "user", content: prompt });
+
   const systemPrompt = \`Tu es un pote Discord toxique, sarcastique, qui insulte à moitié mais reste drôle. Sois insolent et familier.\`;
   try {
     const response = await openai.chat.completions.create({
@@ -34,7 +50,12 @@ async function getBotResponse(prompt) {
         { role: "user", content: prompt }
       ]
     });
-    return response.choices[0].message.content.trim();
+    
+    const botReply = response.choices[0].message.content.trim();
+    context.push({ role: "assistant", content: botReply });
+    saveMemory(jid, context);
+    return botReply;
+
   } catch (err) {
     console.error("OpenAI Error:", err);
     return "T'as cassé mon cerveau là. Réessaye plus tard.";
@@ -93,7 +114,7 @@ async function startBot() {
     }
 
     if (iaActive && (isMentioned || isReplyToBot)) {
-      const reply = await getBotResponse(messageContent);
+      const reply = await getBotResponse(messageContent, from);
       await sock.sendMessage(from, { text: reply }, { quoted: msg });
 
       if (Math.random() < 0.4 && stickers.length > 0) {
