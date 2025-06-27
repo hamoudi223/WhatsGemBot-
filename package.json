@@ -1,15 +1,17 @@
 {
-  "name": "bot-whatsapp-toxique",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
-  "main": "bot.js",
   "type": "module",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.0",
-    "openai": "^4.0.0",
-    "dotenv": "^16.0.0",
-    "@hapi/boom": "^10.0.0"
+    "@whiskeysockets/baileys": "^6.7.18",
+    "@hapi/boom": "^10.0.0",
+    "dotenv": "^16.0.3",
+    "openai": "^4.6.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
